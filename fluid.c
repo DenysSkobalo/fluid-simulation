@@ -6,7 +6,7 @@
 #define COLOR_WHITE 0xffffffff
 #define COLOR_BLACK 0x00000000
 #define COLOR_BLUE 0x34c3eb
-#define COLOR_GRAY 0xf0f0f0f0
+#define COLOR_GRAY 0x1f1f1f1f
 #define CELL_SIZE 10
 #define LINE_WIDTH 2
 #define COLUMNS SCREEN_WIDTH/CELL_SIZE
@@ -17,6 +17,14 @@ struct Cell
 	int type;
 	int fill_level;
 };
+
+void color_cell(SDL_Surface* surface, int x, int y)
+{
+	int pixel_x = x*CELL_SIZE;
+	int pixel_y = y*CELL_SIZE;
+	SDL_Rect cell_rect = (SDL_Rect){pixel_x, pixel_y, CELL_SIZE, CELL_SIZE};
+	SDL_FillRect(surface, &cell_rect, COLOR_WHITE);
+}
 
 void draw_grid(SDL_Surface* surface)
 {
@@ -41,12 +49,33 @@ int main()
 
 	draw_grid(surface);
 
-	SDL_Rect rectangle = (SDL_Rect){50, 50, 100, 50}; 
-	SDL_FillRect(surface, &rectangle, COLOR_WHITE);
+	int simulation_running = 1;
+	SDL_Event event;
+	while (simulation_running)
+	{
+		while (SDL_PollEvent(&event))
+		{
+			if (event.type == SDL_QUIT) 
+			{
+				simulation_running = 0;
+			}
+			if (event.type == SDL_MOUSEMOTION)
+			{
+				if (event.motion.state != 0)
+				{
+					int cell_x = event.motion.x / CELL_SIZE;
+					int cell_y = event.motion.y / CELL_SIZE;
+					color_cell(surface, cell_x, cell_y);
+				}
+			}
+		}
+		SDL_Rect rectangle = (SDL_Rect){50, 50, 100, 50}; 
+		SDL_FillRect(surface, &rectangle, COLOR_WHITE);
 
-	SDL_Rect blue_rectangle = (SDL_Rect){150, 50, 100, 50}; 
-	SDL_FillRect(surface, &blue_rectangle, COLOR_BLUE);
-	SDL_UpdateWindowSurface(window);
+		SDL_Rect blue_rectangle = (SDL_Rect){150, 50, 100, 50}; 
+		SDL_FillRect(surface, &blue_rectangle, COLOR_BLUE);
+		SDL_UpdateWindowSurface(window);
 
-	SDL_Delay(3000);
+		SDL_Delay(100);
+	}
 }
