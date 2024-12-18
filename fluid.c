@@ -11,19 +11,26 @@
 #define LINE_WIDTH 2
 #define COLUMNS SCREEN_WIDTH/CELL_SIZE
 #define ROWS SCREEN_HEIGHT/CELL_SIZE
+#define WATER_TYPE 0
+#define SOLID_TYPE 1
 
 struct Cell
 {
 	int type;
 	int fill_level;
+	int x;
+	int y;
 };
 
-void color_cell(SDL_Surface* surface, int x, int y)
+void draw_cell(SDL_Surface* surface, struct Cell cell)
 {
-	int pixel_x = x*CELL_SIZE;
-	int pixel_y = y*CELL_SIZE;
+	int pixel_x = cell.x*CELL_SIZE;
+	int pixel_y = cell.y*CELL_SIZE;
 	SDL_Rect cell_rect = (SDL_Rect){pixel_x, pixel_y, CELL_SIZE, CELL_SIZE};
-	SDL_FillRect(surface, &cell_rect, COLOR_WHITE);
+	Uint32 color = COLOR_WHITE;
+	if (cell.type == WATER_TYPE)
+		color = COLOR_BLUE;
+	SDL_FillRect(surface, &cell_rect, color);
 }
 
 void draw_grid(SDL_Surface* surface)
@@ -51,6 +58,8 @@ int main()
 
 	int simulation_running = 1;
 	SDL_Event event;
+	int current_type = SOLID_TYPE;
+					
 	while (simulation_running)
 	{
 		while (SDL_PollEvent(&event))
@@ -65,9 +74,13 @@ int main()
 				{
 					int cell_x = event.motion.x / CELL_SIZE;
 					int cell_y = event.motion.y / CELL_SIZE;
-					color_cell(surface, cell_x, cell_y);
+					struct Cell cell = (struct Cell){current_type,0,cell_x,cell_y};
+					draw_cell(surface, cell);
 				}
 			}
+			if (event.type == SDL_KEYDOWN)
+				if (event.key.keysym.sym == SDLK_SPACE)
+					current_type = !current_type;
 		}
 		SDL_Rect rectangle = (SDL_Rect){50, 50, 100, 50}; 
 		SDL_FillRect(surface, &rectangle, COLOR_WHITE);
