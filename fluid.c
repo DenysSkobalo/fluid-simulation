@@ -33,7 +33,7 @@ void draw_cell(SDL_Surface* surface, struct Cell cell)
 	// water fill level
 	if (cell.type == WATER_TYPE)
   {
-		int water_height = cell.fill_level * CELL_SIZE;
+		int water_height = cell.fill_level > 1 ? CELL_SIZE : cell.fill_level * CELL_SIZE;
 		int empty_height = CELL_SIZE - water_height;
 	  SDL_Rect water_rect = (SDL_Rect){pixel_x, pixel_y + empty_height, CELL_SIZE, water_height};
 	  SDL_FillRect(surface, &water_rect, COLOR_BLUE);
@@ -78,69 +78,121 @@ void initialize_environment(struct Cell environment[ROWS * COLUMNS])
 	}
 }
 
-void simulation_step(struct Cell environment[ROWS*COLUMNS])
+// Rule 1: Water flows down
+void simultaion_phase_rule1(struct Cell environment[ROWS*COLUMNS])
 {
 	struct Cell environment_next[ROWS*COLUMNS];
 	for (int i=0; i<ROWS*COLUMNS; i++)
-	{
 		environment_next[i] = environment[i];
-	}
 
 	for (int i=0; i<ROWS; i++)
-	{
-		for (int j=0; j<COLUMNS; j++)
 		{
-			// Rule 1: Water flows down
-			struct Cell source_cell = environment[j + COLUMNS*i];
-			int rule_1_applied = 0;
-			if (source_cell.type == WATER_TYPE && i<ROWS-1)
+			for (int j=0; j<COLUMNS; j++)
 			{
-				struct Cell destination_cell = environment[j + COLUMNS*(i+1)];
-				// how much liquid can flow intro the destination cell ? 
-				if (destination_cell.fill_level < source_cell.fill_level)
+				struct Cell source_cell = environment[j + COLUMNS*i];
+				int rule_1_applied = 0;
+				if (source_cell.type == WATER_TYPE && i<ROWS-1)
 				{
-					environment_next[j + COLUMNS*i].fill_level = 0;
-					environment_next[j + COLUMNS*(i+1)].fill_level += source_cell.fill_level;
-					rule_1_applied = 1;
-				}
-			}
-			// check fi cell below is either full or solid or bottom border
-			int below_full_or_solid = 0;
-			if (i+1 == ROWS || environment[j + COLUMNS*(i+1)].fill_level >= 1 || environment[j + COLUMNS*(i+1)].type == SOLID_TYPE)
-			{
-        // Rule 2: Water flows to the right
-				if (source_cell.type == WATER_TYPE && j>0)
-				{
-					// how much liquid can flow to the left ? 
-					struct Cell destination_cell = environment[(j-1) + COLUMNS*i];
-					if (destination_cell.type == WATER_TYPE && destination_cell.fill_level < source_cell.fill_level)
-					{
-						double delta_fill = source_cell.fill_level - destination_cell.fill_level;
-						environment_next[j + COLUMNS*i].fill_level -= delta_fill / 3;
-						environment_next[(j-1) + COLUMNS*i].fill_level += delta_fill / 3;
-					}
-				}
-				if (source_cell.type == WATER_TYPE && j<COLUMNS-1)
-				{
-					// how much liquid can flow to the right ?
-					struct Cell destination_cell = environment[(j+1) + COLUMNS*i];
+					struct Cell destination_cell = environment[j + COLUMNS*(i+1)];
+					// how much liquid can flow intro the destination cell ? 
 					if (destination_cell.fill_level < source_cell.fill_level)
 					{
-						double delta_fill = source_cell.fill_level - destination_cell.fill_level;
-						environment_next[j + COLUMNS*i].fill_level -= delta_fill / 3;
-						environment_next[(j+1) + COLUMNS*i].fill_level += delta_fill / 3;
+						double free_space_destination = 1 - destination_cell.fill_level;
+						if (free_space_destination >= source_cell.fill_level)
+						{
+							environment_next[j + COLUMNS*i].fill_level = 0;
+							environment_next[j + COLUMNS*(i+1)].fill_level += source_cell.fill_level;
+						} 
+						else 
+						{
+							environment_next[j + COLUMNS*i].fill_level -= free_space_destination;
+							environment_next[j + COLUMNS*(i+1)].fill_level = 1;
+						}
 					}
 				}
 			}
-			
-			
 		}
-	}
+		for (int i=0; i<ROWS*COLUMNS; i++)
+			environment[i] = environment_next[i];
+}
 
+// Rule 2: Water flows to the right
+void simultaion_phase_rule2(struct Cell environment[ROWS*COLUMNS])
+{
+	struct Cell environment_next[ROWS*COLUMNS];
 	for (int i=0; i<ROWS*COLUMNS; i++)
-	{
-		environment[i] = environment_next[i];
-	}
+		environment_next[i] = environment[i];
+
+	for (int i=0; i<ROWS; i++)
+		{
+			for (int j=0; j<COLUMNS; j++)
+			{
+				// check fi cell below is either full or solid or bottom border
+				struct Cell source_cell = environment[j + COLUMNS*i];
+				if (i+1 == ROWS || environment[j + COLUMNS*(i+1)].fill_level >= environment[j + COLUMNS* i].fill_level || environment[j + COLUMNS*(i+1)].type == SOLID_TYPE)
+				{
+					if (source_cell.type == WATER_TYPE && j>0)
+					{
+						// how much liquid can flow to the left ? 
+						struct Cell destination_cell = environment[(j-1) + COLUMNS*i];
+						if (destination_cell.type == WATER_TYPE && destination_cell.fill_level < source_cell.fill_level)
+						{
+							double delta_fill = source_cell.fill_level - destination_cell.fill_level;
+							environment_next[j + COLUMNS*i].fill_level -= delta_fill / 3;
+							environment_next[(j-1) + COLUMNS*i].fill_level += delta_fill / 3;
+						}
+					}
+					if (source_cell.type == WATER_TYPE && j<COLUMNS-1)
+					{
+						// how much liquid can flow to the right ?
+						struct Cell destination_cell = environment[(j+1) + COLUMNS*i];
+						if (destination_cell.fill_level < source_cell.fill_level)
+						{
+							double delta_fill = source_cell.fill_level - destination_cell.fill_level;
+							environment_next[j + COLUMNS*i].fill_level -= delta_fill / 3;
+							environment_next[(j+1) + COLUMNS*i].fill_level += delta_fill / 3;
+						}
+					}
+				}
+			}
+		}
+		for (int i=0; i<ROWS*COLUMNS; i++)
+			environment[i] = environment_next[i];
+}
+
+// Rule 3: Pressurized cells can release fluid upwards
+void simultaion_phase_rule3(struct Cell environment[ROWS*COLUMNS])
+{
+	struct Cell environment_next[ROWS*COLUMNS];
+	for (int i=0; i<ROWS*COLUMNS; i++)
+		environment_next[i] = environment[i];
+
+	for (int i=0; i<ROWS; i++)
+		{
+			for (int j=0; j<COLUMNS; j++)
+			{
+				// check if source cell's fill level is > 1
+				// check if here is a water cell above into which
+				// fluid can be transferred
+				struct Cell source_cell = environment[j + COLUMNS*i];
+				if (source_cell.type == WATER_TYPE && source_cell.fill_level > 1 && i > 0 && environment[j+COLUMNS*(i-1)].type == WATER_TYPE && source_cell.fill_level > environment[j+COLUMNS*(i-1)].fill_level)
+				{
+					struct Cell destination_cell = environment[j+COLUMNS*(i-1)];
+					// cell is pressurized and water can flow up
+					double transfer_fill = (source_cell.fill_level - 1);
+					environment[j+COLUMNS*i].fill_level -=  transfer_fill;
+					environment_next[j+COLUMNS*(i-1)].fill_level +=  transfer_fill;
+				}
+			}
+		}
+		for (int i=0; i<ROWS*COLUMNS; i++)
+			environment[i] = environment_next[i];
+}
+
+void simulation_step(struct Cell environment[ROWS*COLUMNS])
+{
+	simultaion_phase_rule1(environment);
+	simultaion_phase_rule2(environment);
 }
 
 int main() 
@@ -175,27 +227,29 @@ int main()
 					int cell_x = event.motion.x / CELL_SIZE;
 					int cell_y = event.motion.y / CELL_SIZE;
 					int fill_level = delete_mode ? 0 : 1;
+					struct Cell cell;
 					if (delete_mode != 0)
 					{
 						current_type = WATER_TYPE;
+						fill_level = 0;
+						cell = (struct Cell){current_type, fill_level, cell_x, cell_y};
 					}
-					struct Cell cell = (struct Cell){current_type, fill_level, cell_x,cell_y};
+					else
+					{
+						fill_level = environment[cell_x + COLUMNS * cell_y].fill_level + 1;
+						cell = (struct Cell){current_type, fill_level, cell_x, cell_y};
+					}
 					// printf("Writing cell at: x=%d, y=%d\n", cell_x, cell_y);
 					environment[cell_x + COLUMNS*cell_y] = cell;
 				}
 			}
 			if (event.type == SDL_KEYDOWN)
-			 {
+			{
 					if (event.key.keysym.sym == SDLK_SPACE)
-					{
 						current_type = !current_type;
-					}
 					if (event.key.keysym.sym == SDLK_BACKSPACE)
-					{
 						delete_mode = !delete_mode;
-					}
-			 }
-				
+			}
 		}
 
 	  // perform simpulation steps
