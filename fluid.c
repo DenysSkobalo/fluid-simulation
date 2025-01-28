@@ -5,7 +5,8 @@
 #define SCREEN_HEIGHT 600
 #define COLOR_WHITE 0xffffffff
 #define COLOR_BLACK 0x00000000
-#define COLOR_BLUE 0x34c3eb
+#define COLOR_BLUE_MAX 0x34c3eb
+#define COLOR_BLUE_MIN 0x001eff
 #define COLOR_GRAY 0x1f1f1f1f
 #define CELL_SIZE 20
 #define LINE_WIDTH 2
@@ -22,12 +23,27 @@ struct Cell
 	int y;
 };
 
-void draw_cell(SDL_Surface* surface, struct Cell cell)
+Uint32 get_interpolated_color(Uint32 max, Uint32 min, double percentage)
+{
+	Uint32 color1 = max;
+	Uint32 color2 = min;
+	unsigned char r1 = (color1 >> 16) & 0xff;
+	unsigned char r2 = (color2 >> 16) & 0xff;
+	unsigned char g1 = (color1 >> 8) & 0xff;
+	unsigned char g2 = (color2 >> 8) & 0xff;
+	unsigned char b1 = color1 & 0xff;
+	unsigned char b2 = color2 & 0xff;
+
+	return (int) ((r2 - r1) * percentage + r1) << 16 |
+					(int) ((g2 - g1) * percentage + g1) << 8 |
+					(int) ((b2 - b1) * percentage + b1);
+}
+
+void draw_cell(SDL_Surface* surface, struct Cell cell, int fill_cell)
 {
 	int pixel_x = cell.x*CELL_SIZE;
 	int pixel_y = cell.y*CELL_SIZE;
 	SDL_Rect cell_rect = (SDL_Rect){pixel_x, pixel_y, CELL_SIZE, CELL_SIZE};
-	Uint32 color = COLOR_BLACK;
 	// BG - backgorund color
 	SDL_FillRect(surface, &cell_rect, COLOR_BLACK);
 	// water fill level
@@ -35,22 +51,45 @@ void draw_cell(SDL_Surface* surface, struct Cell cell)
   {
 		int water_height = cell.fill_level > 1 ? CELL_SIZE : cell.fill_level * CELL_SIZE;
 		int empty_height = CELL_SIZE - water_height;
-	  SDL_Rect water_rect = (SDL_Rect){pixel_x, pixel_y + empty_height, CELL_SIZE, water_height};
-	  SDL_FillRect(surface, &water_rect, COLOR_BLUE);
+		SDL_Rect water_rect = (SDL_Rect){pixel_x, pixel_y + empty_height, CELL_SIZE, water_height};
+		Uint32 interpolated_color = get_interpolated_color(COLOR_BLUE_MAX, COLOR_BLUE_MIN, cell.fill_level);
+		if (cell.fill_level < 0.1)
+			interpolated_color = COLOR_BLACK;
+		if (fill_cell)
+		{
+			SDL_FillRect(surface, &cell_rect, interpolated_color);	
+		}
+		else
+		{
+			SDL_FillRect(surface, &water_rect, interpolated_color);	
+		}
 	}
 	// solid blocks
 	if (cell.type == SOLID_TYPE)
-		{
-			SDL_FillRect(surface, &cell_rect, COLOR_WHITE);
-		}
+	{
+		SDL_FillRect(surface, &cell_rect, COLOR_WHITE);
+	}
 }
 
 void draw_environment(SDL_Surface* surface , struct Cell environment[ROWS*COLUMNS])
 {
 	for (int i=0; i<ROWS*COLUMNS; i++)
-	{
-		draw_cell(surface, environment[i]);
-	}
+		draw_cell(surface, environment[i], 1);
+
+	// fill water cascades / fountains to be continous
+	// for (int i=0; i<ROWS; i++)
+	// {
+	// 	for (int j=0; j<COLUMNS; j++)
+	// 	{
+	// 		// check if the current cell is below a WATER_TYPE cells with a fill > 0 
+	// 		struct Cell cell_above = environment[j+COLUMNS*(i-1)];
+	// 		struct Cell cell_current = environment[j+COLUMNS*i];
+	// 		if (i>0 && cell_above.type == WATER_TYPE && cell_above.fill_level > 0.02 && cell_current.fill_level > 0.02 && cell_current.type == WATER_TYPE)
+	// 		{
+	// 				draw_cell(surface, environment[j+COLUMNS*i], 1);
+	// 		}
+	// 	}
+	// }
 }
 
 void draw_grid(SDL_Surface* surface)
@@ -64,9 +103,7 @@ void draw_grid(SDL_Surface* surface)
 	{
 		SDL_Rect row = (SDL_Rect){0, j*CELL_SIZE, SCREEN_WIDTH, LINE_WIDTH};
 		SDL_FillRect(surface, &row, COLOR_GRAY);
-	}
-}
-
+	} }
 void initialize_environment(struct Cell environment[ROWS * COLUMNS])
 {
 	for (int i=0; i<ROWS; i++) 
@@ -236,8 +273,15 @@ int main()
 					}
 					else
 					{
-						fill_level = environment[cell_x + COLUMNS * cell_y].fill_level + 1;
-						cell = (struct Cell){current_type, fill_level, cell_x, cell_y};
+						if (environment[cell_x + COLUMNS * cell_y].fill_level >= 1)
+						{
+							fill_level = environment[cell_y + COLUMNS * cell_x].fill_level + 1;
+						}
+						else 
+						{
+							fill_level = 1;
+							cell = (struct Cell){current_type, fill_level, cell_x, cell_y};
+						}
 					}
 					// printf("Writing cell at: x=%d, y=%d\n", cell_x, cell_y);
 					environment[cell_x + COLUMNS*cell_y] = cell;
